@@ -1,5 +1,6 @@
 use shuttle_secrets::{SecretStore, Secrets};
 use std::time::Duration;
+use tmi::client::write::SameMessageBypass;
 use tmi::ChannelRef;
 
 #[shuttle_runtime::main]
@@ -26,6 +27,7 @@ impl shuttle_runtime::Service for Dhayib {
             .connect_with_timeout(Duration::from_secs(1))
             .await
             .map_err(into_shuttle)?;
+        let mut smb = SameMessageBypass::default();
 
         client
             .join(ChannelRef::parse("#SadMadLadSalman").unwrap())
@@ -41,7 +43,7 @@ impl shuttle_runtime::Service for Dhayib {
                 msg = client.recv() => {
                     let msg = msg.map_err(into_shuttle)?;
                     let msg = msg.as_typed().map_err(into_shuttle)?;
-                    handle_message(&mut client, msg).await?;
+                    handle_message(&mut smb, &mut client, msg).await?;
                 }
             }
         }
@@ -52,13 +54,14 @@ impl shuttle_runtime::Service for Dhayib {
 }
 
 async fn handle_message(
+    smb: &mut SameMessageBypass,
     client: &mut tmi::Client,
     msg: tmi::Message<'_>,
 ) -> Result<(), shuttle_runtime::Error> {
     if let tmi::Message::Privmsg(msg) = msg {
         if msg.text().contains("6yb") || msg.text().contains("ok") {
             client
-                .privmsg(msg.channel(), "6yb")
+                .privmsg(msg.channel(), &format!("6yb{}", smb.get()))
                 .send()
                 .await
                 .map_err(into_shuttle)?;
