@@ -6,8 +6,8 @@ use tmi::ChannelRef;
 #[shuttle_runtime::main]
 async fn shuttle_main(
     #[Secrets] secret_store: SecretStore,
-) -> Result<Dhayib, shuttle_runtime::Error> {
-    Ok(Dhayib {
+) -> Result<Tayb, shuttle_runtime::Error> {
+    Ok(Tayb {
         credentials: tmi::Credentials {
             nick: secret_store.must("NICK")?,
             pass: secret_store.must("PASS")?,
@@ -15,12 +15,12 @@ async fn shuttle_main(
     })
 }
 
-struct Dhayib {
+struct Tayb {
     credentials: tmi::Credentials,
 }
 
 #[shuttle_runtime::async_trait]
-impl shuttle_runtime::Service for Dhayib {
+impl shuttle_runtime::Service for Tayb {
     async fn bind(self, _addr: std::net::SocketAddr) -> Result<(), shuttle_runtime::Error> {
         let mut client = tmi::Client::builder()
             .credentials(self.credentials)
