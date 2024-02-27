@@ -1,5 +1,4 @@
 use shuttle_secrets::{SecretStore, Secrets};
-use std::time::Duration;
 use tmi::client::write::SameMessageBypass;
 use tmi::ChannelRef;
 
@@ -24,7 +23,7 @@ impl shuttle_runtime::Service for Tayb {
     async fn bind(self, _addr: std::net::SocketAddr) -> Result<(), shuttle_runtime::Error> {
         let mut client = tmi::Client::builder()
             .credentials(self.credentials)
-            .connect_with_timeout(Duration::from_secs(1))
+            .connect()
             .await
             .map_err(into_shuttle)?;
         let mut smb = SameMessageBypass::default();
@@ -58,14 +57,21 @@ async fn handle_message(
     client: &mut tmi::Client,
     msg: tmi::Message<'_>,
 ) -> Result<(), shuttle_runtime::Error> {
-    if let tmi::Message::Privmsg(msg) = msg {
-        if msg.text().contains("6yb") || msg.text().contains("ok") {
-            client
-                .privmsg(msg.channel(), &format!("6yb{}", smb.get()))
-                .send()
-                .await
-                .map_err(into_shuttle)?;
+    match msg {
+        tmi::Message::Privmsg(msg) => {
+            if msg.text().contains("6yb") || msg.text().contains("ok") {
+                client
+                    .privmsg(msg.channel(), &format!("6yb{}", smb.get()))
+                    .send()
+                    .await
+                    .map_err(into_shuttle)?;
+            }
         }
+        tmi::Message::Ping(ping) => {
+            client.pong(&ping).await.map_err(into_shuttle)?;
+        }
+        tmi::Message::Reconnect => client.reconnect().await.map_err(into_shuttle)?,
+        _ => {}
     }
 
     Ok(())
