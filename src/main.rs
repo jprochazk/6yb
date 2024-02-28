@@ -6,32 +6,56 @@ use tmi::ChannelRef;
 async fn shuttle_main(
     #[Secrets] secret_store: SecretStore,
 ) -> Result<Tayb, shuttle_runtime::Error> {
-    Ok(Tayb {
-        credentials: tmi::Credentials {
+    let channels = Channels::parse(secret_store.must("CHANNELS")?)?;
+    let client = tmi::Client::builder()
+        .credentials(tmi::Credentials {
             nick: secret_store.must("NICK")?,
             pass: secret_store.must("PASS")?,
-        },
+        })
+        .connect()
+        .await
+        .map_err(into_shuttle)?;
+    let smb = SameMessageBypass::default();
+    Ok(Tayb {
+        channels,
+        client,
+        smb,
     })
 }
 
+struct Channels(Vec<tmi::Channel>);
+
+impl Channels {
+    fn parse(channels_csv: String) -> Result<Self, shuttle_runtime::Error> {
+        Ok(Self(
+            channels_csv
+                .split(',')
+                .map(|v| v.to_owned())
+                .map(tmi::Channel::parse)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(into_shuttle)?,
+        ))
+    }
+}
+
+impl std::ops::Deref for Channels {
+    type Target = Vec<tmi::Channel>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 struct Tayb {
-    credentials: tmi::Credentials,
+    channels: Channels,
+    client: tmi::Client,
+    smb: SameMessageBypass,
 }
 
 #[shuttle_runtime::async_trait]
 impl shuttle_runtime::Service for Tayb {
-    async fn bind(self, _addr: std::net::SocketAddr) -> Result<(), shuttle_runtime::Error> {
-        let mut client = tmi::Client::builder()
-            .credentials(self.credentials)
-            .connect()
-            .await
-            .map_err(into_shuttle)?;
-        let mut smb = SameMessageBypass::default();
-
-        client
-            .join(ChannelRef::parse("#SadMadLadSalman").unwrap())
-            .await
-            .map_err(into_shuttle)?;
+    async fn bind(mut self, _addr: std::net::SocketAddr) -> Result<(), shuttle_runtime::Error> {
+        self.on_connect().await?;
 
         loop {
             // `tokio::select` either `ctrl-c` or `client.recv()`
@@ -39,10 +63,10 @@ impl shuttle_runtime::Service for Tayb {
                 _ = tokio::signal::ctrl_c() => {
                     break;
                 }
-                msg = client.recv() => {
+                msg = self.client.recv() => {
                     let msg = msg.map_err(into_shuttle)?;
                     let msg = msg.as_typed().map_err(into_shuttle)?;
-                    handle_message(&mut smb, &mut client, msg).await?;
+                    self.handle_message(msg).await?;
                 }
             }
         }
@@ -52,29 +76,41 @@ impl shuttle_runtime::Service for Tayb {
     }
 }
 
-async fn handle_message(
-    smb: &mut SameMessageBypass,
-    client: &mut tmi::Client,
-    msg: tmi::Message<'_>,
-) -> Result<(), shuttle_runtime::Error> {
-    match msg {
-        tmi::Message::Privmsg(msg) => {
-            if msg.text().contains("6yb") || msg.text().contains("ok") {
-                client
-                    .privmsg(msg.channel(), &format!("6yb{}", smb.get()))
-                    .send()
-                    .await
-                    .map_err(into_shuttle)?;
-            }
-        }
-        tmi::Message::Ping(ping) => {
-            client.pong(&ping).await.map_err(into_shuttle)?;
-        }
-        tmi::Message::Reconnect => client.reconnect().await.map_err(into_shuttle)?,
-        _ => {}
+impl Tayb {
+    async fn on_connect(&mut self) -> Result<(), shuttle_runtime::Error> {
+        self.client
+            .join_all(&*self.channels)
+            .await
+            .map_err(into_shuttle)?;
+        Ok(())
     }
 
-    Ok(())
+    async fn handle_message(
+        &mut self,
+        msg: tmi::Message<'_>,
+    ) -> Result<(), shuttle_runtime::Error> {
+        match msg {
+            tmi::Message::Privmsg(msg) => {
+                if msg.text().contains("6yb") || msg.text().contains("ok") {
+                    self.client
+                        .privmsg(msg.channel(), &format!("6yb{}", self.smb.get()))
+                        .send()
+                        .await
+                        .map_err(into_shuttle)?;
+                }
+            }
+            tmi::Message::Ping(ping) => {
+                self.client.pong(&ping).await.map_err(into_shuttle)?;
+            }
+            tmi::Message::Reconnect => {
+                self.client.reconnect().await.map_err(into_shuttle)?;
+                self.on_connect().await?;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
 }
 
 trait SecretStoreExt {
