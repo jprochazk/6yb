@@ -90,7 +90,7 @@ impl Tayb {
     ) -> Result<(), shuttle_runtime::Error> {
         match msg {
             tmi::Message::Privmsg(msg) => {
-                const OK: &[&str] = &["6yb", "ok"];
+                const OK: &[&str] = &["6yb", "ok", "طيب"];
                 let tayb = msg.text().split_ascii_whitespace().any(|v| OK.contains(&v));
                 if tayb {
                     self.client
