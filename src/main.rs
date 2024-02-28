@@ -1,6 +1,5 @@
 use shuttle_secrets::{SecretStore, Secrets};
 use tmi::client::write::SameMessageBypass;
-use tmi::ChannelRef;
 
 #[shuttle_runtime::main]
 async fn shuttle_main(
@@ -91,7 +90,9 @@ impl Tayb {
     ) -> Result<(), shuttle_runtime::Error> {
         match msg {
             tmi::Message::Privmsg(msg) => {
-                if msg.text().contains("6yb") || msg.text().contains("ok") {
+                const OK: &[&str] = &["6yb", "ok"];
+                let tayb = msg.text().split_ascii_whitespace().any(|v| OK.contains(&v));
+                if tayb {
                     self.client
                         .privmsg(msg.channel(), &format!("6yb{}", self.smb.get()))
                         .send()
