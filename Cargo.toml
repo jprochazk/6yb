@@ -5,7 +5,6 @@ edition = "2021"
 publish = false
 
 [dependencies]
-shuttle-runtime = "0.39.0"
-shuttle-secrets = "0.39.0"
+shuttle-runtime = "0.42.0"
 tmi = "0.6"
 tokio = "1"

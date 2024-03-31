@@ -1,4 +1,4 @@
-use shuttle_secrets::{SecretStore, Secrets};
+use shuttle_runtime::{SecretStore, Secrets};
 use tmi::client::write::SameMessageBypass;
 
 #[shuttle_runtime::main]
