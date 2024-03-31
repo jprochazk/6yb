@@ -5,12 +5,16 @@ use tmi::client::write::SameMessageBypass;
 async fn shuttle_main(
     #[Secrets] secret_store: SecretStore,
 ) -> Result<Tayb, shuttle_runtime::Error> {
-    let channels = Channels::parse(secret_store.must("CHANNELS")?)?;
+    let channels = secret_store
+        .must("CHANNELS")?
+        .split(',')
+        .map(String::from)
+        .collect();
     let client = tmi::Client::builder()
-        .credentials(tmi::Credentials {
-            nick: secret_store.must("NICK")?,
-            pass: secret_store.must("PASS")?,
-        })
+        .credentials(tmi::Credentials::new(
+            secret_store.must("NICK")?,
+            secret_store.must("PASS")?,
+        ))
         .connect()
         .await
         .map_err(into_shuttle)?;
@@ -22,31 +26,8 @@ async fn shuttle_main(
     })
 }
 
-struct Channels(Vec<tmi::Channel>);
-
-impl Channels {
-    fn parse(channels_csv: String) -> Result<Self, shuttle_runtime::Error> {
-        Ok(Self(
-            channels_csv
-                .split(',')
-                .map(|v| v.to_owned())
-                .map(tmi::Channel::parse)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(into_shuttle)?,
-        ))
-    }
-}
-
-impl std::ops::Deref for Channels {
-    type Target = Vec<tmi::Channel>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 struct Tayb {
-    channels: Channels,
+    channels: Vec<String>,
     client: tmi::Client,
     smb: SameMessageBypass,
 }

@@ -7,5 +7,5 @@ publish = false
 [dependencies]
 shuttle-runtime = "0.39.0"
 shuttle-secrets = "0.39.0"
-tmi = "0.4.0"
+tmi = "0.6"
 tokio = "1"
