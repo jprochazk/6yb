@@ -72,7 +72,10 @@ impl Tayb {
         match msg {
             tmi::Message::Privmsg(msg) => {
                 const OK: &[&str] = &["6yb", "ok", "طيب"];
-                let tayb = msg.text().split_ascii_whitespace().any(|v| OK.contains(&v));
+                let tayb = msg
+                    .text()
+                    .split_ascii_whitespace()
+                    .any(|v| OK.iter().any(|ok| v.eq_ignore_ascii_case(ok)));
                 if tayb {
                     self.client
                         .privmsg(msg.channel(), &format!("6yb{}", self.smb.get()))
