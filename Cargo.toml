@@ -5,6 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
+governor = { version = "0.6.3", default-features = false, features = ["std"] }
 shuttle-runtime = "0.42.0"
 tmi = "0.6"
 tokio = "1"

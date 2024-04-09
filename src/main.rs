@@ -1,4 +1,6 @@
+use governor::Quota;
 use shuttle_runtime::{SecretStore, Secrets};
+use std::num::NonZeroU32;
 use tmi::client::write::SameMessageBypass;
 
 #[shuttle_runtime::main]
@@ -23,13 +25,29 @@ async fn shuttle_main(
         channels,
         client,
         smb,
+        rate_limit: UserRateLimit::new(),
     })
+}
+
+struct UserRateLimit(governor::DefaultKeyedRateLimiter<String>);
+
+impl UserRateLimit {
+    fn new() -> Self {
+        const REPLY_QUOTA: Quota = Quota::per_second(unsafe { NonZeroU32::new_unchecked(1) });
+
+        Self(governor::DefaultKeyedRateLimiter::hashmap(REPLY_QUOTA))
+    }
+
+    fn can_reply_to(&mut self, user: String) -> bool {
+        self.0.check_key(&user).is_ok()
+    }
 }
 
 struct Tayb {
     channels: Vec<String>,
     client: tmi::Client,
     smb: SameMessageBypass,
+    rate_limit: UserRateLimit,
 }
 
 #[shuttle_runtime::async_trait]
@@ -76,7 +94,8 @@ impl Tayb {
                     .text()
                     .split_ascii_whitespace()
                     .any(|v| OK.iter().any(|ok| v.eq_ignore_ascii_case(ok)));
-                if tayb {
+                let user = msg.sender().login().to_owned();
+                if tayb && self.rate_limit.can_reply_to(user) {
                     self.client
                         .privmsg(msg.channel(), &format!("6yb{}", self.smb.get()))
                         .send()
