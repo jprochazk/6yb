@@ -74,6 +74,38 @@ impl shuttle_runtime::Service for Tayb {
     }
 }
 
+struct Phrase<'a> {
+    needle: &'a [&'a str],
+    reply: &'a str,
+}
+
+const PHRASES: &[Phrase] = &[
+    Phrase {
+        needle: &["6yb", "ok", "طيب"],
+        reply: "6yb",
+    },
+    Phrase {
+        needle: &["yep", "yebb"],
+        reply: "YEBB",
+    },
+];
+
+impl<'a> Phrase<'a> {
+    fn get_reply(text: &str) -> Option<&'static str> {
+        let fragments = text.split_ascii_whitespace();
+        for phrase in PHRASES {
+            if fragments
+                .clone()
+                .any(|frag| phrase.needle.iter().any(|v| frag.eq_ignore_ascii_case(v)))
+            {
+                return Some(phrase.reply);
+            }
+        }
+
+        None
+    }
+}
+
 impl Tayb {
     async fn on_connect(&mut self) -> Result<(), shuttle_runtime::Error> {
         self.client
@@ -89,18 +121,15 @@ impl Tayb {
     ) -> Result<(), shuttle_runtime::Error> {
         match msg {
             tmi::Message::Privmsg(msg) => {
-                const OK: &[&str] = &["6yb", "ok", "طيب"];
-                let tayb = msg
-                    .text()
-                    .split_ascii_whitespace()
-                    .any(|v| OK.iter().any(|ok| v.eq_ignore_ascii_case(ok)));
-                let user = msg.sender().login().to_owned();
-                if tayb && self.rate_limit.can_reply_to(user) {
-                    self.client
-                        .privmsg(msg.channel(), &format!("6yb{}", self.smb.get()))
-                        .send()
-                        .await
-                        .map_err(into_shuttle)?;
+                if let Some(reply) = Phrase::get_reply(msg.text()) {
+                    let user = msg.sender().login().to_owned();
+                    if self.rate_limit.can_reply_to(user) {
+                        self.client
+                            .privmsg(msg.channel(), &format!("{reply}{}", self.smb.get()))
+                            .send()
+                            .await
+                            .map_err(into_shuttle)?;
+                    }
                 }
             }
             tmi::Message::Ping(ping) => {
