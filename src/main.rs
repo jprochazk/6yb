@@ -1,6 +1,7 @@
 use governor::Quota;
 use shuttle_runtime::{SecretStore, Secrets};
 use std::num::NonZeroU32;
+use std::time::Duration;
 use tmi::client::write::SameMessageBypass;
 
 #[shuttle_runtime::main]
@@ -33,9 +34,11 @@ struct UserRateLimit(governor::DefaultKeyedRateLimiter<String>);
 
 impl UserRateLimit {
     fn new() -> Self {
-        const REPLY_QUOTA: Quota = Quota::per_second(unsafe { NonZeroU32::new_unchecked(1) });
-
-        Self(governor::DefaultKeyedRateLimiter::hashmap(REPLY_QUOTA))
+        Self(governor::DefaultKeyedRateLimiter::hashmap(
+            Quota::with_period(Duration::from_secs(3))
+                .unwrap()
+                .allow_burst(NonZeroU32::new(1).unwrap()),
+        ))
     }
 
     fn can_reply_to(&mut self, user: String) -> bool {
@@ -121,6 +124,14 @@ impl Tayb {
     ) -> Result<(), shuttle_runtime::Error> {
         match msg {
             tmi::Message::Privmsg(msg) => {
+                // !pyramid <n>
+                if let Some(mut args) = msg.text().strip_prefix("!pyramid") {
+                    args = args.trim();
+                    if let Ok(n) = args.parse::<u8>() {
+                        return self.pyramid(msg.sender().login(), msg.channel(), n).await;
+                    }
+                }
+
                 if let Some(reply) = Phrase::get_reply(msg.text()) {
                     let user = msg.sender().login().to_owned();
                     if self.rate_limit.can_reply_to(user) {
@@ -143,6 +154,51 @@ impl Tayb {
         }
 
         Ok(())
+    }
+
+    async fn pyramid(
+        &mut self,
+        sender_login: &str,
+        channel: &str,
+        n: u8,
+    ) -> Result<(), shuttle_runtime::Error> {
+        use std::fmt::Write;
+
+        fn privmsg(channel: &str, text: &str, out: &mut impl Write) {
+            write!(out, "PRIVMSG {channel} :{text}\r\n").ok();
+        }
+
+        const ALLOW_LIST: &[&str] = &["mosscode", "vesdev"];
+        if !ALLOW_LIST.contains(&sender_login) {
+            return Ok(());
+        }
+
+        if !(1..=4).contains(&n) {
+            return Ok(());
+        }
+
+        let mut batch = String::new();
+        let mut line = Vec::new();
+
+        // 6yb
+        // 6yb 6yb
+        // 6yb 6yb 6yb
+        // 6yb 6yb
+        // 6yb
+
+        for _ in 0..n {
+            line.push("6yb");
+            privmsg(channel, &line.join(" "), &mut batch);
+        }
+        for _ in 0..n - 1 {
+            line.pop();
+            privmsg(channel, &line.join(" "), &mut batch);
+        }
+
+        self.client
+            .send_raw(batch.as_str())
+            .await
+            .map_err(into_shuttle)
     }
 }
 
