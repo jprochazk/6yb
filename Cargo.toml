@@ -6,6 +6,6 @@ publish = false
 
 [dependencies]
 governor = { version = "0.6.3", default-features = false, features = ["std"] }
-shuttle-runtime = "0.42.0"
+shuttle-runtime = "0.45.0"
 tmi = "0.6"
 tokio = "1"
